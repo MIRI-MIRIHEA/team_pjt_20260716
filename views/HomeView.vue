@@ -5,6 +5,8 @@ import HomeCalendarWidget from '../components/HomeCalendarWidget.vue'
 import PostRankPanel from '../components/PostRankPanel.vue'
 
 const router = useRouter()
+import { nextTick } from 'vue'
+const calendarRef = ref(null)
 const globalSearchQuery = ref('')
 
 // 지정 색상 기반 카테고리 8개 정의
@@ -54,9 +56,17 @@ const handleSearch = () => {
   router.push({ path: '/search', query: { q: globalSearchQuery.value } })
 }
 
-const goToBoard = (id) => {
+const goToBoard = async (id) => {
   if (id === 'weather') {
-    alert('날씨/캘린더 서비스는 준비 중입니다.')
+    // scroll to calendar widget if present
+    await nextTick()
+    const comp = calendarRef.value
+    const el = comp?.$el || document.querySelector('.home-calendar-root')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    alert('캘린더로 이동할 수 없습니다. 페이지를 새로고침 해주세요.')
     return
   }
   router.push(`/board/${id}`)
@@ -110,7 +120,7 @@ const goToBoard = (id) => {
     <!-- 4. 하단 정보 3분할 영역: 캘린더 / 인기글 / 도움된 글 -->
     <div class="bg-[#F4F7FA] -mx-4 px-4 py-8 rounded-3xl">
       <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr] gap-5">
-        <HomeCalendarWidget />
+        <HomeCalendarWidget ref="calendarRef" />
         <PostRankPanel
           title="가장 많이 본 글"
           icon="fa-fire"

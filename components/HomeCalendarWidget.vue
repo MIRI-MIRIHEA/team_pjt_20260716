@@ -56,11 +56,17 @@ const changeMonth = (delta) => {
   loadPostDates()
 }
 
+const onDayClick = (day) => {
+  if (!day) return
+  const ev = new CustomEvent('localhub-date-selected', { detail: { year: viewYear.value, month: viewMonth.value + 1, day } })
+  window.dispatchEvent(ev)
+}
+
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 </script>
 
 <template>
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-full flex flex-col">
+  <div class="home-calendar-root bg-white rounded-2xl border border-gray-100 shadow-sm p-5 h-full flex flex-col">
     <div class="flex items-center justify-between mb-4">
       <button
         @click="changeMonth(-1)"
@@ -90,11 +96,15 @@ const weekdays = ['일', '월', '화', '수', '목', '금', '토']
         <div v-for="(day, ci) in row" :key="ci" class="h-8 flex items-center justify-center relative">
           <span
             v-if="day"
+            @click="onDayClick(day)"
+            role="button"
+            tabindex="0"
             :class="[
-              'w-7 h-7 flex items-center justify-center rounded-full transition',
+              'w-7 h-7 flex items-center justify-center rounded-full transition cursor-pointer select-none',
               isToday(day)
                 ? 'bg-[#F4D03F] text-[#7E5109] font-bold'
-                : ci === 0 ? 'text-[#E74C3C]' : ci === 6 ? 'text-[#21618C]' : 'text-gray-600'
+                : ci === 0 ? 'text-[#E74C3C]' : ci === 6 ? 'text-[#21618C]' : 'text-gray-600',
+              'hover:bg-gray-100'
             ]"
           >
             {{ day }}

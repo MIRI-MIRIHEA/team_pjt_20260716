@@ -15,49 +15,77 @@ const chatInput = ref('')
 const chatMessages = ref([])
 const chatContainer = ref(null)
 
-// --- OpenAI API key (client-side) helpers ---
-const LOCAL_API_KEY = 'localhub_openai_key'
-const getApiKey = () => {
-  try { return localStorage.getItem(LOCAL_API_KEY) || '' } catch (e) { return '' }
-}
-const setApiKey = (key) => {
-  try { localStorage.setItem(LOCAL_API_KEY, key) } catch (e) {}
-}
-const removeApiKey = () => {
-  try { localStorage.removeItem(LOCAL_API_KEY) } catch (e) {}
-}
+// OpenAI API key must be kept server-side. Client does not store or use API keys.
 
-const apiModalOpen = ref(false)
-const apiKeyInput = ref(getApiKey())
-const apiStatus = ref('')
-
-const testApiKey = async (key) => {
-  apiStatus.value = '테스트 중...'
-  try {
-    const res = await fetch('https://api.openai.com/v1/models', {
-      headers: { Authorization: `Bearer ${key}` }
-    })
-    if (res.ok) {
-      apiStatus.value = '연결 성공'
-      return true
-    }
-    apiStatus.value = `연결 실패: ${res.status}`
-    return false
-  } catch (err) {
-    apiStatus.value = '네트워크/CORS 오류 또는 키가 유효하지 않습니다.'
-    return false
-  }
-}
-
-// Helper to call OpenAI Chat Completions (client-side). Keep payload small to control cost.
+// Helper to call OpenAI directly from the client using VITE_ env key.
+// WARNING: Using `VITE_` env keys exposes them in the built frontend. Use only for development/testing.
 const callOpenAI = async (userMessage) => {
-  const key = getApiKey()
-  if (!key) throw new Error('API key not set')
+  const key = import.meta.env.VITE_OPENAI_KEY || ''
+  if (!key) throw new Error('환경변수 VITE_OPENAI_KEY가 설정되어 있지 않습니다.')
 
+  const modelName = 'gpt-5-mini'
+
+  const tryExtract = (obj) => {
+    if (!obj) return ''
+    if (typeof obj === 'string') return obj
+    if (obj.output_text) return obj.output_text
+    if (obj.output && Array.isArray(obj.output)) {
+      for (const out of obj.output) {
+        if (typeof out === 'string') return out
+        if (out.content && Array.isArray(out.content)) {
+          const parts = out.content.map(c => c.text || c.content || '').filter(Boolean)
+          if (parts.length) return parts.join('\n')
+        }
+        if (out.text) return out.text
+      }
+    }
+    if (obj.choices && Array.isArray(obj.choices)) {
+      const c = obj.choices[0]
+      if (c?.message?.content) return c.message.content
+      if (c?.text) return c.text
+    }
+    return ''
+  }
+
+  // For gpt-5-series use Responses API
+  if (modelName.startsWith('gpt-5')) {
+    const body = {
+      model: modelName,
+      input: [
+        { role: 'system', content: '당신은 서울 지역 정보를 도와주는 도우미입니다. 가능한 한 간결하게 답변하세요.' },
+        { role: 'user', content: userMessage }
+      ],
+      max_completion_tokens: 500
+    }
+
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`OpenAI 에러 ${res.status}: ${txt}`)
+    }
+
+    const data = await res.json()
+    const extracted = tryExtract(data)
+    if (!extracted) throw new Error('모델이 응답 내용을 반환하지 않았습니다.')
+    return extracted
+  }
+
+  // Fallback to chat completions for older models
   const body = {
-    model: 'gpt-3.5-turbo',
-    messages: [{ role: 'system', content: '당신은 서울 지역 정보를 도와주는 도우미입니다. 가능한 한 간결하게 답변하세요.' }, { role: 'user', content: userMessage }],
-    max_tokens: 500,
+    model: modelName,
+    messages: [
+      { role: 'system', content: '당신은 서울 지역 정보를 도와주는 도우미입니다. 가능한 한 간결하게 답변하세요.' },
+      { role: 'user', content: userMessage }
+    ],
+    max_completion_tokens: 500,
     temperature: 0.2
   }
 
@@ -76,7 +104,9 @@ const callOpenAI = async (userMessage) => {
   }
 
   const data = await res.json()
-  return data.choices?.[0]?.message?.content || ''
+  const result = data.choices?.[0]?.message?.content || ''
+  if (!result) throw new Error('모델이 응답 내용을 반환하지 않았습니다.')
+  return result
 }
 
 
@@ -161,7 +191,74 @@ watch([chatMessages, isChatLoading], () => {
 
 onMounted(() => {
   scrollToBottom()
+  // listen for calendar date selections
+  window.addEventListener('localhub-date-selected', (e) => {
+    try {
+      const { year, month, day } = e.detail || {}
+      handleDateSelection(year, month, day)
+    } catch (err) {
+      console.error('date select handler error', err)
+    }
+  })
 })
+
+const pad = (n) => String(n).padStart(2, '0')
+
+const handleDateSelection = (year, month, day) => {
+  if (!year || !month || !day) return
+  isChatOpen.value = true
+  const y = String(year)
+  const m = pad(month)
+  const d = pad(day)
+  const ymd = `${y}${m}${d}` // YYYYMMDD
+
+  // find matching festivals/events
+  const matches = (festivalData.items || []).filter((it) => {
+    const s = it.eventstartdate || it.createdtime || it.modifiedtime || ''
+    const e = it.eventenddate || s
+    if (!s) return false
+    return s <= ymd && ymd <= e
+  })
+
+  // find local posts on that date
+  const stored = localStorage.getItem('localhub_posts')
+  const posts = stored ? JSON.parse(stored) : []
+  const postsOnDate = posts.filter((p) => {
+    if (!p.createdAt) return false
+    const dt = new Date(p.createdAt)
+    const py = dt.getFullYear()
+    const pm = dt.getMonth() + 1
+    const pd = dt.getDate()
+    return py === year && pm === month && pd === day
+  })
+
+  let reply = `📅 ${year}-${m}-${d} 일정 검색 결과:\n` 
+  if (matches.length) {
+    reply += `\n🎪 ${matches.length}개 행사/축제:\n`
+    matches.slice(0, 5).forEach((it, idx) => {
+      const title = it.title || it.name || '제목 없음'
+      const place = it.eventplace || it.addr1 || ''
+      const start = it.eventstartdate || it.createdtime || ''
+      const end = it.eventenddate || it.modifiedtime || start
+      reply += `${idx + 1}. ${title} ${place ? `- ${place}` : ''} (${start}${end && end !== start ? ` ~ ${end}` : ''})\n`
+    })
+  } else {
+    reply += '\n🎪 해당 날짜의 공식 행사/축제 정보는 없습니다.\n'
+  }
+
+  if (postsOnDate.length) {
+    reply += `\n💬 ${postsOnDate.length}개의 커뮤니티 게시글:\n`
+    postsOnDate.slice(0,5).forEach((p, idx) => {
+      const title = p.title || p.content?.slice(0,30) || '게시글'
+      reply += `${idx + 1}. ${title} - by ${p.author || '익명'}\n`
+    })
+  } else {
+    reply += '\n💬 해당 날짜에 작성된 커뮤니티 게시글은 없습니다.\n'
+  }
+
+  chatMessages.value.push({ role: 'assistant', content: reply })
+  scrollToBottom()
+}
 
 const districtOptions = computed(() => {
   if (!selectedCategory.value) return []
@@ -338,14 +435,7 @@ const sendMessage = async () => {
     return
   }
 
-  // 로컬 매칭 없을 경우 클라이언트 OpenAI 호출 시도
-  const key = getApiKey()
-  if (!key) {
-    chatMessages.value.push({ role: 'assistant', content: '🔑 API 키가 설정되어 있지 않습니다. 상단의 API 키 설정 버튼을 눌러 개인 키를 입력해 주세요 (개발/테스트 용).\n경고: 브라우저에 키가 저장되며 노출 위험이 있습니다.' })
-    isChatLoading.value = false
-    scrollToBottom()
-    return
-  }
+  // 로컬 매칭 없을 경우 서버 프록시로 OpenAI 호출하도록 처리
 
   try {
     const aiReply = await callOpenAI(userText)
@@ -373,29 +463,11 @@ const sendMessage = async () => {
             <i class="fa-solid fa-trash"></i>
             <span>대화 클리어</span>
           </button>
-          <button @click="apiModalOpen = true" title="API 키 설정" class="text-sm text-white/90 hover:text-white/100 p-2 rounded-md hover:bg-white/5 flex items-center gap-2">
-            <i class="fa-solid fa-key"></i>
-            <span>API 키 설정</span>
-          </button>
         </div>
       </div>
 
       <div class="flex-1 min-h-0 bg-[#F7F9FB]">
-        <div v-if="apiModalOpen" class="fixed inset-0 z-60 flex items-center justify-center p-4">
-           <div class="absolute inset-0 bg-black/50" @click="apiModalOpen = false"></div>
-           <div class="relative bg-white rounded-2xl p-4 w-full max-w-md z-70 shadow-lg">
-             <h3 class="font-bold text-sm mb-2">OpenAI API 키 설정 (개발/테스트용)</h3>
-             <p class="text-xs text-gray-500 mb-3">주의: 브라우저 localStorage에 키가 저장됩니다. 운영 환경에서는 백엔드 프록시를 사용하세요.</p>
-             <input v-model="apiKeyInput" type="password" placeholder="sk-..." class="w-full border rounded px-3 py-2 mb-2 text-sm">
-             <div class="flex gap-2 justify-end">
-               <button @click="removeApiKey(); apiKeyInput = ''" class="px-3 py-2 rounded bg-gray-100 text-sm">삭제</button>
-               <button @click="testApiKey(apiKeyInput)" class="px-3 py-2 rounded bg-gray-200 text-sm">연결 테스트</button>
-               <button @click="(async()=>{ const ok = await testApiKey(apiKeyInput); if(ok){ setApiKey(apiKeyInput); apiModalOpen = false } })()" class="px-3 py-2 rounded bg-[#2F4F4F] text-white text-sm">저장 후 닫기</button>
-             </div>
-             <div class="text-xs text-gray-600 mt-2">상태: {{ apiStatus }}</div>
-           </div>
-         </div>
-
+        <!-- API key UI removed: keys are stored and used server-side only -->
         <div ref="chatContainer" class="h-full overflow-y-auto overflow-x-hidden p-4 text-sm scroll-smooth">
           <div class="max-w-[85%] rounded-2xl rounded-bl-md bg-white p-3 border border-gray-200 leading-relaxed text-gray-700 shadow-sm mb-4">
             안녕하세요! 오랫봇입니다. 아래 버튼을 눌러 먼저 카테고리와 구를 순서대로 선택해 주세요.
