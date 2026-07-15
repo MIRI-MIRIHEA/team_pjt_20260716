@@ -15,17 +15,42 @@ const authActionType = ref('') // 'edit' 또는 'delete'
 const inputPassword = ref('')
 const authError = ref('')
 
+// [추가] 좋아요 1인 1회 제한을 위한 로컬 저장 키 및 상태
+const LIKED_STORAGE_KEY = 'localhub_liked_posts'
+
+const getLikedPostIds = () => {
+  const stored = localStorage.getItem(LIKED_STORAGE_KEY)
+  return stored ? JSON.parse(stored) : []
+}
+
+const isLiked = ref(false)
+
 onMounted(() => {
   const stored = localStorage.getItem('localhub_posts')
   if (stored) {
     posts.value = JSON.parse(stored)
     post.value = posts.value.find(p => p.id === id)
   }
+  isLiked.value = getLikedPostIds().includes(id)
 })
 
 const handleLike = () => {
   if (!post.value) return
-  post.value.likes++
+  const likedIds = getLikedPostIds()
+
+  if (isLiked.value) {
+    // 좋아요 취소
+    post.value.likes = Math.max(0, post.value.likes - 1)
+    localStorage.setItem(LIKED_STORAGE_KEY, JSON.stringify(likedIds.filter(pid => pid !== id)))
+    isLiked.value = false
+  } else {
+    // 좋아요 추가
+    post.value.likes++
+    likedIds.push(id)
+    localStorage.setItem(LIKED_STORAGE_KEY, JSON.stringify(likedIds))
+    isLiked.value = true
+  }
+
   localStorage.setItem('localhub_posts', JSON.stringify(posts.value))
 }
 
@@ -33,7 +58,7 @@ const openAuthModal = (action) => {
   authActionType.value = action
   inputPassword.value = ''
   authError.value = ''
-  showAuthModal.value = true
+  showAuthModal.value = true // ★버튼을 누를 때만 모달이 열립니다.
 }
 
 const confirmAuth = () => {
@@ -75,7 +100,13 @@ const confirmAuth = () => {
       <div class="p-6 text-gray-700 leading-relaxed min-h-[200px] whitespace-pre-wrap">{{ post.content }}</div>
 
       <div class="flex justify-center pb-8">
-        <button @click="handleLike" class="bg-[#E74C3C]/10 text-[#E74C3C] px-6 py-2.5 rounded-xl font-bold hover:bg-[#E74C3C]/20 transition flex items-center gap-2">
+        <button
+          @click="handleLike"
+          :class="[
+            'px-6 py-2.5 rounded-xl font-bold transition flex items-center gap-2',
+            isLiked ? 'bg-[#E74C3C] text-white hover:bg-[#E74C3C]/90' : 'bg-[#E74C3C]/10 text-[#E74C3C] hover:bg-[#E74C3C]/20'
+          ]"
+        >
           <i class="fa-solid fa-heart"></i> 유익해요 {{ post.likes }}
         </button>
       </div>
