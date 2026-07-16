@@ -3,9 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import HomeCalendarWidget from '../components/HomeCalendarWidget.vue'
 import PostRankPanel from '../components/PostRankPanel.vue'
+import ImageRotator from '../components/ImageRotator.vue'
 
 const router = useRouter()
-import { nextTick } from 'vue'
 const calendarRef = ref(null)
 const globalSearchQuery = ref('')
 
@@ -75,6 +75,9 @@ const goToBoard = async (id) => {
       </h1>
       <p class="text-sm text-[#34495E] mt-2 font-medium">공공데이터 기반 서울 지역 정보 공유 익명 커뮤니티</p>
     </div>
+
+    <!-- Image rotator (검색창 위) -->
+    <ImageRotator />
 
     <!-- 2. 통합 검색바 -->
     <div class="max-w-2xl mx-auto relative">
