@@ -1,6 +1,6 @@
 const OPENAI_API = 'https://api.openai.com/v1'
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   try {
     const key = process.env.OPENAI_API_KEY
     if (!key) return { statusCode: 500, body: JSON.stringify({ error: 'server_missing_api_key' }) }
@@ -10,7 +10,7 @@ exports.handler = async (event) => {
     if (!model) return { statusCode: 400, body: JSON.stringify({ error: 'missing_model' }) }
 
     let endpoint, payload
-    if (model.startsWith('gpt-5')) {
+    if (String(model).startsWith('gpt-5')) {
       endpoint = `${OPENAI_API}/responses`
       if (body.input) payload = { model, input: body.input, max_output_tokens: 500 }
       else if (body.messages) payload = { model, input: body.messages, max_output_tokens: 500 }
