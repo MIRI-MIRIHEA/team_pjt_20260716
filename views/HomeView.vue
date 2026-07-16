@@ -18,7 +18,7 @@ const categories = ref([
   { id: 'accommodation', name: '숙박', icon: 'fa-bed', bg: 'bg-[#34495E]/10', text: 'text-[#34495E]' },
   { id: 'course', name: '여행코스', icon: 'fa-map-signs', bg: 'bg-[#E74C3C]/10', text: 'text-[#E74C3C]' },
   { id: 'festival', name: '축제공연행사', icon: 'fa-masks-theater', bg: 'bg-[#7E5109]/10', text: 'text-[#7E5109]' },
-  { id: 'weather', name: '캘린더&날씨', icon: 'fa-cloud-sun-rain', bg: 'bg-[#21618C]/10', text: 'text-[#21618C]' }
+  { id: 'weather', name: '정보', icon: 'fa-circle-exclamation', bg: 'bg-[#21618C]/10', text: 'text-[#21618C]' }
 ])
 
 // 로컬스토리지 게시글(localhub_posts)을 기반으로 인기글/도움된글 패널 구성
@@ -58,15 +58,7 @@ const handleSearch = () => {
 
 const goToBoard = async (id) => {
   if (id === 'weather') {
-    // scroll to calendar widget if present
-    await nextTick()
-    const comp = calendarRef.value
-    const el = comp?.$el || document.querySelector('.home-calendar-root')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return
-    }
-    alert('캘린더로 이동할 수 없습니다. 페이지를 새로고침 해주세요.')
+    router.push('/info')
     return
   }
   router.push(`/board/${id}`)
