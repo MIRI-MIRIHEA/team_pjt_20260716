@@ -117,9 +117,21 @@ const viewedLocations = ref([])
 const scrollToBottom = () => {
   nextTick(() => {
     window.requestAnimationFrame(() => {
-      if (chatContainer.value) {
-        chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+      const container = chatContainer.value
+      if (!container) return
+
+      // Try to align the last message to the bottom (above the selectable buttons)
+      const messagesWrap = container.querySelector('.space-y-3')
+      if (messagesWrap && messagesWrap.children.length) {
+        const lastMsg = messagesWrap.children[messagesWrap.children.length - 1]
+        // Calculate scrollTop so last message is visible at the bottom of container
+        const target = lastMsg.offsetTop + lastMsg.offsetHeight - container.clientHeight
+        container.scrollTop = target > 0 ? target + 8 : 0
+        return
       }
+
+      // Fallback: scroll to bottom
+      container.scrollTop = container.scrollHeight
     })
   })
 }
