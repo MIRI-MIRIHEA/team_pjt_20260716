@@ -34,13 +34,13 @@ export const handler = async (event) => {
     let endpoint, payload
     if (String(model).startsWith('gpt-5')) {
       endpoint = `${OPENAI_API}/responses`
-      if (body.input) payload = { model, input: body.input, max_output_tokens: 500 }
-      else if (body.messages) payload = { model, input: body.messages, max_output_tokens: 500 }
+      if (body.input) payload = { model, input: body.input, max_output_tokens: 1000 }
+      else if (body.messages) payload = { model, input: body.messages, max_output_tokens: 1000 }
       else return { statusCode: 400, body: JSON.stringify({ error: 'missing_input_or_messages' }) }
     } else {
       endpoint = `${OPENAI_API}/chat/completions`
       if (!body.messages) return { statusCode: 400, body: JSON.stringify({ error: 'missing_messages' }) }
-      payload = { model, messages: body.messages, max_tokens: 500, temperature: 0.2 }
+      payload = { model, messages: body.messages, max_tokens: 1000, temperature: 0.2 }
     }
 
     const resp = await fetch(endpoint, {
